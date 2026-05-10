@@ -1,8 +1,39 @@
 import bcrypt from 'bcryptjs'
 import { Prisma } from '@prisma/client'
-import { signAccessToken } from '../lib/jwt'
+import { signAccessToken, verifyAccessToken } from '../lib/jwt'
 import { prisma } from '../prisma'
 import type { Credentials } from '../validation/authCredentials'
+
+export async function getSessionUser(cookieToken: string | undefined): Promise<
+  | { outcome: 'ok'; user: { id: string; email: string } }
+  | { outcome: 'anonymous' }
+  | { outcome: 'invalid_session' }
+  | { outcome: 'failed'; cause: unknown }
+> {
+  if (typeof cookieToken !== 'string' || !cookieToken.trim()) {
+    return { outcome: 'anonymous' }
+  }
+
+  let userId: string
+  try {
+    userId = verifyAccessToken(cookieToken).userId
+  } catch {
+    return { outcome: 'invalid_session' }
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    })
+    if (!user) {
+      return { outcome: 'invalid_session' }
+    }
+    return { outcome: 'ok', user }
+  } catch (err) {
+    return { outcome: 'failed', cause: err }
+  }
+}
 
 export async function registerUser(
   input: Credentials,

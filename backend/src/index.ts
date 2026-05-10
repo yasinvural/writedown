@@ -1,3 +1,5 @@
+import cookieParser from 'cookie-parser'
+import cors from 'cors'
 import express from 'express'
 import { authRouter } from './routes/authRoutes'
 import { prisma } from './prisma'
@@ -6,6 +8,15 @@ const app = express()
 const port = Number(process.env.PORT) || 3000
 const host = '0.0.0.0'
 
+const corsOrigin = process.env.CORS_ORIGIN?.trim() || 'http://localhost:5173'
+
+app.use(
+  cors({
+    origin: corsOrigin,
+    credentials: true,
+  }),
+)
+app.use(cookieParser())
 app.use(express.json({ limit: '32kb' }))
 
 app.get('/', (_req, res) => {
