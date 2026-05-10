@@ -9,6 +9,7 @@ import {
   useTrashDocumentsQuery,
 } from "./documentQueries";
 import { DocumentEditorPane } from "./DocumentEditorPane";
+import { TextPromptDialog } from "../../components/TextPromptDialog";
 
 function scrollTextStyle() {
   return "min-h-0 flex-1 overflow-y-auto";
@@ -37,15 +38,15 @@ function DocumentSidebar({
   onSoftDelete,
   onRestore,
 }: DocumentSidebarProps) {
-  const [promptOpen, setPromptOpen] = useState(false);
+  const [renameDoc, setRenameDoc] = useState<DocumentDto | null>(null);
 
-  function handleRenameClick(doc: DocumentDto) {
-    if (promptOpen) return;
-    setPromptOpen(true);
-    const next = window.prompt("Document title", doc.title);
-    setPromptOpen(false);
-    if (next === null) return;
-    const t = next.trim();
+  const closeRenameDialog = useCallback(() => setRenameDoc(null), []);
+
+  function confirmRename(raw: string) {
+    const doc = renameDoc;
+    setRenameDoc(null);
+    if (!doc) return;
+    const t = raw.trim();
     if (!t || t === doc.title) return;
     onRename(doc.id, t);
   }
@@ -99,7 +100,7 @@ function DocumentSidebar({
                       disabled={isBusy}
                       className="cursor-pointer rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-zinc-400 hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
                       title="Rename"
-                      onClick={() => handleRenameClick(doc)}
+                      onClick={() => setRenameDoc(doc)}
                     >
                       Edit
                     </button>
@@ -151,6 +152,17 @@ function DocumentSidebar({
           )}
         </ul>
       </details>
+
+      <TextPromptDialog
+        key={renameDoc?.id ?? "closed"}
+        open={renameDoc !== null}
+        title="Rename document"
+        label="Document title"
+        defaultValue={renameDoc?.title ?? ""}
+        disabled={isBusy}
+        onCancel={closeRenameDialog}
+        onConfirm={confirmRename}
+      />
     </aside>
   );
 }
