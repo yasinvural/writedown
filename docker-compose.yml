@@ -33,8 +33,9 @@ services:
     volumes:
       # Live-reload against host sources (image COPY is only the initial snapshot).
       - ./frontend:/app
-      # Keep deps from the image; avoid overwriting with host / empty dir.
+      # Installed deps live in this volume — `npm ci` on start installs from mounted package-lock.json.
       - /app/node_modules
+    command: ["sh", "-c", "npm ci && exec npm run dev"]
     depends_on:
       - backend
 

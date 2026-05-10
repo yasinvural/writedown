@@ -1,42 +1,9 @@
-export type AuthUser = { id: string; email: string }
+import { ApiError, apiBase, errorMessageFromBody, readJson } from "./http";
 
-export class ApiError extends Error {
-  readonly status: number
-  readonly body: unknown
+export type AuthUser = { id: string; email: string };
 
-  constructor(status: number, message: string, body: unknown) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-    this.body = body
-  }
-}
-
-function apiBase(): string {
-  const raw = import.meta.env.VITE_API_BASE_URL
-  if (typeof raw === 'string' && raw.trim()) {
-    return raw.replace(/\/$/, '')
-  }
-  return 'http://localhost:3000'
-}
-
-async function readJson(res: Response): Promise<unknown> {
-  const text = await res.text()
-  if (!text.trim()) return null
-  try {
-    return JSON.parse(text) as unknown
-  } catch {
-    return null
-  }
-}
-
-function errorMessageFromBody(body: unknown, fallback: string): string {
-  if (body && typeof body === 'object' && 'error' in body) {
-    const e = (body as { error: unknown }).error
-    if (typeof e === 'string' && e.trim()) return e
-  }
-  return fallback
-}
+/** Re-export for callers that imported `ApiError` from `./auth`. */
+export { ApiError } from "./http";
 
 export async function fetchMe(): Promise<AuthUser | null> {
   const res = await fetch(`${apiBase()}/auth/me`, {
