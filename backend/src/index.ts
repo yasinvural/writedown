@@ -1,9 +1,12 @@
 import express from 'express'
+import { authRouter } from './routes/authRoutes'
 import { prisma } from './prisma'
 
 const app = express()
 const port = Number(process.env.PORT) || 3000
 const host = '0.0.0.0'
+
+app.use(express.json({ limit: '32kb' }))
 
 app.get('/', (_req, res) => {
   res.status(200).send('ok')
@@ -22,6 +25,18 @@ app.get('/health/db', async (_req, res) => {
     res.status(503).json({ status: 'error', database: 'disconnected' })
   }
 })
+
+app.use('/auth', authRouter)
+
+app.use(
+  (err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err instanceof SyntaxError && 'body' in err) {
+      res.status(400).json({ error: 'Invalid JSON body' })
+      return
+    }
+    next(err)
+  },
+)
 
 const server = app.listen(port, host, () => {
   console.log(`Server listening on http://${host}:${port}`)
