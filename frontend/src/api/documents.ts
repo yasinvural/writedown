@@ -1,4 +1,3 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiBase, errorMessageFromBody, readJson } from "./http";
 
 async function readBodyOrThrow(res: Response, fallbackMsg: string): Promise<unknown> {
@@ -20,15 +19,6 @@ export type DocumentDto = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
-};
-
-export const documentKeys = {
-  all: ["documents"] as const,
-  activeList: () => [...documentKeys.all, "active"] as const,
-  trashList: () => [...documentKeys.all, "trash"] as const,
-  detail: (id: string) => [...documentKeys.all, "detail", id] as const,
-  /** Client-side / optimistic editor buffer (optional consumers) */
-  draft: (id: string) => [...documentKeys.all, "draft", id] as const,
 };
 
 function isDocumentDto(v: unknown): v is DocumentDto {
@@ -132,63 +122,4 @@ export async function restoreDocument(id: string): Promise<DocumentDto> {
     throw new ApiError(500, "Invalid response", body)
   }
   return body
-}
-
-function useInvalidateDocumentLists() {
-  const qc = useQueryClient()
-  return () => {
-    void qc.invalidateQueries({ queryKey: documentKeys.activeList() })
-    void qc.invalidateQueries({ queryKey: documentKeys.trashList() })
-  }
-}
-
-export function useActiveDocumentsQuery() {
-  return useQuery({
-    queryKey: documentKeys.activeList(),
-    queryFn: fetchActiveDocuments,
-  })
-}
-
-export function useTrashDocumentsQuery() {
-  return useQuery({
-    queryKey: documentKeys.trashList(),
-    queryFn: fetchTrashDocuments,
-  })
-}
-
-export function useCreateDocumentMutation() {
-  const invalidate = useInvalidateDocumentLists()
-  return useMutation({
-    mutationFn: (payload?: { title?: string; content?: unknown }) => createDocument(payload),
-    onSuccess: () => invalidate(),
-  })
-}
-
-export function usePatchDocumentMutation() {
-  const qc = useQueryClient()
-  const invalidate = useInvalidateDocumentLists()
-  return useMutation({
-    mutationFn: (args: { id: string; title?: string; content?: unknown }) =>
-      patchDocument(args.id, { title: args.title, content: args.content }),
-    onSuccess: (_data, vars) => {
-      invalidate()
-      void qc.invalidateQueries({ queryKey: documentKeys.detail(vars.id) })
-    },
-  })
-}
-
-export function useSoftDeleteDocumentMutation() {
-  const invalidate = useInvalidateDocumentLists()
-  return useMutation({
-    mutationFn: (id: string) => softDeleteDocument(id),
-    onSuccess: () => invalidate(),
-  })
-}
-
-export function useRestoreDocumentMutation() {
-  const invalidate = useInvalidateDocumentLists()
-  return useMutation({
-    mutationFn: (id: string) => restoreDocument(id),
-    onSuccess: () => invalidate(),
-  })
 }

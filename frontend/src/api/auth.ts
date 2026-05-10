@@ -2,9 +2,6 @@ import { ApiError, apiBase, errorMessageFromBody, readJson } from "./http";
 
 export type AuthUser = { id: string; email: string };
 
-/** Re-export for callers that imported `ApiError` from `./auth`. */
-export { ApiError } from "./http";
-
 export async function fetchMe(): Promise<AuthUser | null> {
   const res = await fetch(`${apiBase()}/auth/me`, {
     method: 'GET',

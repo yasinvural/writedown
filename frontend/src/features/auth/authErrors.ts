@@ -1,4 +1,4 @@
-import { ApiError } from "../../api/auth";
+import { ApiError } from "../../api/http";
 
 /**
  * Maps API / network failures to safe user-visible copy.

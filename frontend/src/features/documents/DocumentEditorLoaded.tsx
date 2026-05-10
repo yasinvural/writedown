@@ -3,8 +3,8 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useDebouncedCallback } from "use-debounce";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DocumentDto } from "../../api/documents";
-import { usePatchDocumentMutation } from "../../api/documents";
+import type { DocumentDto } from "./documentQueries";
+import { usePatchDocumentMutation } from "./documentQueries";
 import { ApiError } from "../../api/http";
 import { SlashCommands } from "./tiptap/slashCommandsExtension";
 

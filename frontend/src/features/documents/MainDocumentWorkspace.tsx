@@ -7,7 +7,7 @@ import {
   useRestoreDocumentMutation,
   useSoftDeleteDocumentMutation,
   useTrashDocumentsQuery,
-} from "../../api/documents";
+} from "./documentQueries";
 import { DocumentEditorPane } from "./DocumentEditorPane";
 
 function scrollTextStyle() {
@@ -166,12 +166,19 @@ export function MainDocumentWorkspace() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const flushBeforeLeaveRef = useRef<(() => Promise<void>) | null>(null);
 
-  const active = activeQuery.data ?? [];
-  const trash = trashQuery.data ?? [];
+  const active = useMemo(() => activeQuery.data ?? [], [activeQuery.data]);
+  const trash = useMemo(() => trashQuery.data ?? [], [trashQuery.data]);
+
+  const resolvedSelectedId = useMemo(() => {
+    if (selectedId !== null && active.some((d) => d.id === selectedId)) {
+      return selectedId;
+    }
+    return active[0]?.id ?? null;
+  }, [active, selectedId]);
 
   const selectedDoc = useMemo(
-    () => active.find((d) => d.id === selectedId) ?? null,
-    [active, selectedId],
+    () => active.find((d) => d.id === resolvedSelectedId) ?? null,
+    [active, resolvedSelectedId],
   );
 
   const isBusy =
@@ -197,12 +204,6 @@ export function MainDocumentWorkspace() {
       void trySelectDocument(active[0]?.id ?? null);
     }
   }, [active, selectedId, trySelectDocument]);
-
-  useEffect(() => {
-    if (selectedId === null && active.length > 0) {
-      setSelectedId(active[0].id);
-    }
-  }, [active, selectedId]);
 
   const registerFlush = useCallback((fn: (() => Promise<void>) | null) => {
     flushBeforeLeaveRef.current = fn;
@@ -261,7 +262,7 @@ export function MainDocumentWorkspace() {
           <DocumentSidebar
             active={active}
             trash={trash}
-            selectedId={selectedId}
+            selectedId={resolvedSelectedId}
             isBusy={isBusy || activeQuery.isPending}
             onSelect={trySelectDocument}
             onCreate={handleCreate}

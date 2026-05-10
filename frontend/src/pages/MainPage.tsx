@@ -1,21 +1,21 @@
 import { useNavigate } from "react-router-dom";
-import { logout } from "../api/auth";
 import { useAuth } from "../auth/useAuth";
 import { MainHeader } from "../features/app/MainHeader";
 import { MainDocumentWorkspace } from "../features/documents/MainDocumentWorkspace";
+import { useLogoutMutation } from "../queries/authQueries";
 
 export function MainPage() {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
+  const logoutMut = useLogoutMutation();
 
-  async function handleSignOut() {
-    try {
-      await logout();
-    } catch {
-      // Still clear local auth view if cookie clear failed on server.
-    }
-    setUser(null);
-    navigate("/login", { replace: true });
+  function handleSignOut() {
+    logoutMut.mutate(undefined, {
+      onSettled: () => {
+        setUser(null);
+        navigate("/login", { replace: true });
+      },
+    });
   }
 
   return (
