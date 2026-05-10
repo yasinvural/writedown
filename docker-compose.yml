@@ -30,6 +30,11 @@ services:
       context: ./frontend
     ports:
       - "5173:5173"
+    volumes:
+      # Live-reload against host sources (image COPY is only the initial snapshot).
+      - ./frontend:/app
+      # Keep deps from the image; avoid overwriting with host / empty dir.
+      - /app/node_modules
     depends_on:
       - backend
 
