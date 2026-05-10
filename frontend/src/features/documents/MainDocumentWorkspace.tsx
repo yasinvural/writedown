@@ -9,6 +9,7 @@ import {
   useTrashDocumentsQuery,
 } from "./documentQueries";
 import { DocumentEditorPane } from "./DocumentEditorPane";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { TextPromptDialog } from "../../components/TextPromptDialog";
 
 function scrollTextStyle() {
@@ -39,8 +40,10 @@ function DocumentSidebar({
   onRestore,
 }: DocumentSidebarProps) {
   const [renameDoc, setRenameDoc] = useState<DocumentDto | null>(null);
+  const [deleteDoc, setDeleteDoc] = useState<DocumentDto | null>(null);
 
   const closeRenameDialog = useCallback(() => setRenameDoc(null), []);
+  const closeDeleteModal = useCallback(() => setDeleteDoc(null), []);
 
   function confirmRename(raw: string) {
     const doc = renameDoc;
@@ -49,6 +52,13 @@ function DocumentSidebar({
     const t = raw.trim();
     if (!t || t === doc.title) return;
     onRename(doc.id, t);
+  }
+
+  function confirmSoftDelete() {
+    const doc = deleteDoc;
+    setDeleteDoc(null);
+    if (!doc) return;
+    void onSoftDelete(doc.id);
   }
 
   return (
@@ -109,7 +119,7 @@ function DocumentSidebar({
                       disabled={isBusy}
                       className="cursor-pointer rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-zinc-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
                       title="Move to trash"
-                      onClick={() => void onSoftDelete(doc.id)}
+                      onClick={() => setDeleteDoc(doc)}
                     >
                       Del
                     </button>
@@ -162,6 +172,19 @@ function DocumentSidebar({
         disabled={isBusy}
         onCancel={closeRenameDialog}
         onConfirm={confirmRename}
+      />
+
+      <ConfirmModal
+        key={deleteDoc?.id ?? "closed"}
+        open={deleteDoc !== null}
+        title="Move this document to trash?"
+        description="You can restore it later from trash in the sidebar."
+        tone="danger"
+        cancelLabel="Cancel"
+        confirmLabel="Move to trash"
+        disabled={isBusy}
+        onCancel={closeDeleteModal}
+        onConfirm={confirmSoftDelete}
       />
     </aside>
   );
