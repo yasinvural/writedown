@@ -1,16 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   type DocumentDto,
   useActiveDocumentsQuery,
   useCreateDocumentMutation,
+  useCreateShareCodeMutation,
+  useDocumentQuery,
   usePatchDocumentMutation,
   useRestoreDocumentMutation,
   useSoftDeleteDocumentMutation,
   useTrashDocumentsQuery,
 } from "./documentQueries";
 import { DocumentEditorPane } from "./DocumentEditorPane";
+import { ApiError } from "../../api/http";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { ShareInviteDialog } from "../../components/ShareInviteDialog";
+import { ShareRedeemDialog } from "../../components/ShareRedeemDialog";
 import { TextPromptDialog } from "../../components/TextPromptDialog";
+import openSharedSvg from "../../assets/open-shared.svg?raw";
+import plusSvg from "../../assets/plus.svg?raw";
 
 function scrollTextStyle() {
   return "min-h-0 flex-1 overflow-y-auto";
@@ -26,6 +33,7 @@ type DocumentSidebarProps = {
   onRename: (id: string, title: string) => void;
   onSoftDelete: (id: string) => void;
   onRestore: (id: string) => void;
+  onOpenShared: () => void;
 };
 
 function DocumentSidebar({
@@ -38,6 +46,7 @@ function DocumentSidebar({
   onRename,
   onSoftDelete,
   onRestore,
+  onOpenShared,
 }: DocumentSidebarProps) {
   const [renameDoc, setRenameDoc] = useState<DocumentDto | null>(null);
   const [deleteDoc, setDeleteDoc] = useState<DocumentDto | null>(null);
@@ -65,19 +74,40 @@ function DocumentSidebar({
     <aside
       className={`flex w-64 shrink-0 flex-col border-r border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/20 ${scrollTextStyle()}`}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
-        <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-          Documents
-        </span>
-        <button
-          type="button"
-          disabled={isBusy}
-          className="cursor-pointer rounded p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-50 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-          onClick={() => void onCreate()}
-          title="New document"
-        >
-          <span className="text-lg leading-none">+</span>
-        </button>
+      <div className="flex shrink-0 flex-col gap-2 px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            Documents
+          </span>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              disabled={isBusy}
+              className="cursor-pointer rounded p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-50 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              onClick={() => onOpenShared()}
+              title="Open shared document"
+              aria-label="Open shared document"
+            >
+              <span
+                className="inline-flex size-[1.125rem] shrink-0 items-center justify-center [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+                dangerouslySetInnerHTML={{ __html: openSharedSvg }}
+              />
+            </button>
+            <button
+              type="button"
+              disabled={isBusy}
+              className="cursor-pointer rounded p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-50 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              onClick={() => void onCreate()}
+              title="New document"
+              aria-label="New document"
+            >
+              <span
+                className="inline-flex size-[1.125rem] shrink-0 items-center justify-center [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+                dangerouslySetInnerHTML={{ __html: plusSvg }}
+              />
+            </button>
+          </div>
+        </div>
       </div>
       <ul className="m-0 list-none space-y-0.5 px-2 pb-4">
         {active.length === 0 ? (
@@ -194,62 +224,118 @@ export function MainDocumentWorkspace() {
   const activeQuery = useActiveDocumentsQuery();
   const trashQuery = useTrashDocumentsQuery();
   const createMut = useCreateDocumentMutation();
+  const createShareMut = useCreateShareCodeMutation();
   const patchMut = usePatchDocumentMutation();
   const deleteMut = useSoftDeleteDocumentMutation();
   const restoreMut = useRestoreDocumentMutation();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pinnedSharedDocumentId, setPinnedSharedDocumentId] = useState<string | null>(null);
+  const [shareInviteOpen, setShareInviteOpen] = useState(false);
+  const [shareInviteCode, setShareInviteCode] = useState("");
+  const [redeemOpen, setRedeemOpen] = useState(false);
+
   const flushBeforeLeaveRef = useRef<(() => Promise<void>) | null>(null);
 
   const active = useMemo(() => activeQuery.data ?? [], [activeQuery.data]);
   const trash = useMemo(() => trashQuery.data ?? [], [trashQuery.data]);
 
-  const resolvedSelectedId = useMemo(() => {
-    if (selectedId !== null && active.some((d) => d.id === selectedId)) {
-      return selectedId;
-    }
-    return active[0]?.id ?? null;
-  }, [active, selectedId]);
-
-  const selectedDoc = useMemo(
-    () => active.find((d) => d.id === resolvedSelectedId) ?? null,
-    [active, resolvedSelectedId],
-  );
-
-  const isBusy =
-    createMut.isPending ||
-    patchMut.isPending ||
-    deleteMut.isPending ||
-    restoreMut.isPending;
-
-  const trySelectDocument = useCallback(async (id: string | null) => {
+  const flushBeforeNavigate = useCallback(async () => {
     const flush = flushBeforeLeaveRef.current;
-    if (flush) {
+    if (!flush) return;
+    try {
+      await flush();
+    } catch {
+      throw new Error("flush_failed");
+    }
+  }, []);
+
+  const navigateToOwned = useCallback(
+    async (id: string | null) => {
       try {
-        await flush();
+        await flushBeforeNavigate();
       } catch {
         return;
       }
+      setPinnedSharedDocumentId(null);
+      setSelectedId(id);
+    },
+    [flushBeforeNavigate],
+  );
+
+  const navigateToSharedDocument = useCallback(
+    async (id: string) => {
+      try {
+        await flushBeforeNavigate();
+      } catch {
+        return;
+      }
+      setPinnedSharedDocumentId(id);
+      setSelectedId(id);
+    },
+    [flushBeforeNavigate],
+  );
+
+  const resolvedSelectedId = useMemo(() => {
+    if (selectedId !== null) {
+      if (active.some((d) => d.id === selectedId)) return selectedId;
+      if (pinnedSharedDocumentId === selectedId) return selectedId;
     }
-    setSelectedId(id);
-  }, []);
+    return active[0]?.id ?? null;
+  }, [active, selectedId, pinnedSharedDocumentId]);
+
+  const needsSharedDetail =
+    resolvedSelectedId !== null &&
+    !active.some((d) => d.id === resolvedSelectedId) &&
+    pinnedSharedDocumentId === resolvedSelectedId;
+
+  const sharedDetailQuery = useDocumentQuery(
+    resolvedSelectedId,
+    Boolean(needsSharedDetail && resolvedSelectedId),
+  );
+
+  const selectedDoc = useMemo((): DocumentDto | null => {
+    if (!resolvedSelectedId) return null;
+    const owned = active.find((d) => d.id === resolvedSelectedId);
+    if (owned) return owned;
+    if (needsSharedDetail) return sharedDetailQuery.data ?? null;
+    return null;
+  }, [resolvedSelectedId, active, needsSharedDetail, sharedDetailQuery.data]);
 
   useEffect(() => {
-    if (selectedId !== null && !active.some((d) => d.id === selectedId)) {
-      void trySelectDocument(active[0]?.id ?? null);
+    if (resolvedSelectedId === selectedId) return;
+    setSelectedId(resolvedSelectedId);
+  }, [resolvedSelectedId, selectedId]);
+
+  useEffect(() => {
+    if (!needsSharedDetail) return;
+    const err = sharedDetailQuery.error;
+    if (err instanceof ApiError && err.status === 404) {
+      setPinnedSharedDocumentId(null);
+      void navigateToOwned(active[0]?.id ?? null);
     }
-  }, [active, selectedId, trySelectDocument]);
+  }, [needsSharedDetail, sharedDetailQuery.error, active, navigateToOwned]);
+
+  const isOwnerView =
+    resolvedSelectedId !== null && active.some((d) => d.id === resolvedSelectedId);
 
   const registerFlush = useCallback((fn: (() => Promise<void>) | null) => {
     flushBeforeLeaveRef.current = fn;
   }, []);
 
+  const isBusy =
+    createMut.isPending ||
+    patchMut.isPending ||
+    deleteMut.isPending ||
+    restoreMut.isPending ||
+    createShareMut.isPending;
+
   async function handleCreate() {
     try {
       const doc = await createMut.mutateAsync(undefined);
-      await trySelectDocument(doc.id);
+      await navigateToOwned(doc.id);
     } catch {
-      /* errors surface in devtools; toast can follow */
+      /* errors surface via devtools */
     }
   }
 
@@ -264,14 +350,14 @@ export function MainDocumentWorkspace() {
   async function handleSoftDelete(id: string) {
     const remaining = active.filter((d) => d.id !== id);
     const nextAfterDelete =
-      selectedId === id ? (remaining[0]?.id ?? null) : selectedId;
+      resolvedSelectedId === id ? (remaining[0]?.id ?? null) : resolvedSelectedId;
     try {
       await deleteMut.mutateAsync(id);
     } catch {
       return;
     }
-    if (selectedId === id) {
-      await trySelectDocument(nextAfterDelete);
+    if (resolvedSelectedId === id) {
+      await navigateToOwned(nextAfterDelete ?? null);
     }
   }
 
@@ -283,38 +369,103 @@ export function MainDocumentWorkspace() {
     }
   }
 
+  async function handleShare() {
+    if (!resolvedSelectedId || !isOwnerView) return;
+    try {
+      const { code } = await createShareMut.mutateAsync(resolvedSelectedId);
+      setShareInviteCode(code);
+      setShareInviteOpen(true);
+    } catch {
+      /* ignore */
+    }
+  }
+
   const loadError = activeQuery.error ?? trashQuery.error;
+
+  let sharedFallback: ReactNode = null;
+  if (needsSharedDetail && !selectedDoc) {
+    if (sharedDetailQuery.isPending) {
+      sharedFallback = (
+        <div className="flex flex-1 items-center justify-start px-8 py-6">
+          <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">Loading shared document…</p>
+        </div>
+      );
+    } else if (sharedDetailQuery.error instanceof ApiError) {
+      sharedFallback = (
+        <div className="flex flex-1 flex-col gap-2 px-8 py-6">
+          <p className="m-0 text-sm text-red-600 dark:text-red-400">{sharedDetailQuery.error.message}</p>
+        </div>
+      );
+    } else if (sharedDetailQuery.error) {
+      sharedFallback = (
+        <div className="flex flex-1 flex-col gap-2 px-8 py-6">
+          <p className="m-0 text-sm text-red-600 dark:text-red-400">Could not load document.</p>
+        </div>
+      );
+    }
+  }
 
   return (
     <section className="flex min-h-0 flex-1 overflow-hidden bg-white dark:bg-zinc-950">
       {loadError ? (
         <p className="m-0 p-4 text-left text-sm text-red-600 dark:text-red-400">
-          Could not load documents. Check that the API is running and you are
-          signed in.
+          Could not load documents. Check that the API is running and you are signed in.
         </p>
       ) : (
-        <div className="flex min-h-0 flex-1 w-full">
+        <div className="flex min-h-0 w-full flex-1">
           <DocumentSidebar
             active={active}
             trash={trash}
             selectedId={resolvedSelectedId}
             isBusy={isBusy || activeQuery.isPending}
-            onSelect={trySelectDocument}
+            onSelect={(id) => void navigateToOwned(id)}
             onCreate={handleCreate}
             onRename={handleRename}
             onSoftDelete={handleSoftDelete}
             onRestore={handleRestore}
+            onOpenShared={() => setRedeemOpen(true)}
           />
-          <div
-            className={`flex min-w-0 flex-1 flex-col bg-white dark:bg-zinc-950 ${scrollTextStyle()}`}
-          >
-            <DocumentEditorPane
-              document={selectedDoc}
-              registerFlush={registerFlush}
-            />
+          <div className={`flex min-w-0 flex-1 flex-col bg-white dark:bg-zinc-950 ${scrollTextStyle()}`}>
+            {!isOwnerView && selectedDoc ? (
+              <p className="m-0 shrink-0 border-b border-zinc-200 px-8 py-2 text-left text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                You&apos;re viewing a document someone shared with you.
+              </p>
+            ) : null}
+            {isOwnerView && resolvedSelectedId ? (
+              <div className="flex shrink-0 justify-end px-8 pt-6">
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  className="cursor-pointer rounded-md border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  title="Generate a share code"
+                  onClick={() => void handleShare()}
+                >
+                  Share…
+                </button>
+              </div>
+            ) : null}
+            {sharedFallback ?? <DocumentEditorPane document={selectedDoc} registerFlush={registerFlush} />}
           </div>
         </div>
       )}
+
+      <ShareInviteDialog
+        open={shareInviteOpen}
+        code={shareInviteCode}
+        disabled={false}
+        onClose={() => {
+          setShareInviteOpen(false);
+          setShareInviteCode("");
+        }}
+      />
+
+      <ShareRedeemDialog
+        open={redeemOpen}
+        onCancel={() => setRedeemOpen(false)}
+        onOpened={async (documentId) => {
+          await navigateToSharedDocument(documentId);
+        }}
+      />
     </section>
   );
 }

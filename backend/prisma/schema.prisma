@@ -21,14 +21,26 @@ model User {
 }
 
 model Document {
-  id        String    @id @default(cuid())
+  id        String         @id @default(cuid())
   userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String    @default("Untitled")
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String         @default("Untitled")
   content   Json
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
   deletedAt DateTime?
+  share     DocumentShare?
 
   @@index([userId, deletedAt])
+}
+
+/// At most one active share row per document (`documentId` is unique). Replacing a share deletes the prior row.
+model DocumentShare {
+  id         String    @id @default(cuid())
+  documentId String    @unique
+  lookupHash String    @unique
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 }

@@ -43,6 +43,7 @@ declare global {
   namespace Express {
     interface Locals {
       userId?: string
+      shareDocumentId?: string
     }
   }
 }

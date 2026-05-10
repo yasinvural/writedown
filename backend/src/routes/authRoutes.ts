@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { AUTH_COOKIE_NAME, clearAuthCookie, setAuthCookie } from '../lib/authCookie'
+import { clearShareAccessCookie } from '../lib/shareAccessCookie'
 import * as authService from '../services/authService'
 import { CREDENTIALS_ERROR, parseCredentials } from '../validation/authCredentials'
 
@@ -81,6 +82,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
 router.post('/logout', (_req: Request, res: Response) => {
   clearAuthCookie(res)
+  clearShareAccessCookie(res)
   res.status(200).json({ ok: true })
 })
 

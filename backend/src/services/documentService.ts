@@ -57,16 +57,50 @@ export async function createDocument(
   })
 }
 
+async function activeShareExists(documentId: string): Promise<boolean> {
+  const row = await prisma.documentShare.findFirst({
+    where: { documentId, revokedAt: null },
+    select: { id: true },
+  })
+  return row !== null
+}
+
+export async function getDocumentForViewer(
+  viewerUserId: string,
+  documentId: string,
+  shareAccessDocumentId: string | undefined,
+): Promise<DocumentDto | 'not_found'> {
+  const doc = await prisma.document.findFirst({
+    where: { id: documentId, deletedAt: null },
+    select: documentSelect(),
+  })
+  if (!doc) return 'not_found'
+  if (doc.userId === viewerUserId) return doc
+
+  if (shareAccessDocumentId === documentId && (await activeShareExists(documentId))) {
+    return doc
+  }
+  return 'not_found'
+}
+
 export async function patchDocument(
   userId: string,
   id: string,
   input: { title?: string; content?: Prisma.InputJsonValue },
+  options?: { shareAccessDocumentId?: string },
 ): Promise<DocumentDto | 'not_found'> {
-  const existing = await prisma.document.findFirst({
-    where: { id, userId, deletedAt: null },
-    select: { id: true },
+  const doc = await prisma.document.findFirst({
+    where: { id, deletedAt: null },
+    select: documentSelect(),
   })
-  if (!existing) return 'not_found'
+  if (!doc) return 'not_found'
+
+  let canWrite = false
+  if (doc.userId === userId) canWrite = true
+  else if (options?.shareAccessDocumentId === id && (await activeShareExists(id))) {
+    canWrite = true
+  }
+  if (!canWrite) return 'not_found'
 
   const data: Prisma.DocumentUpdateInput = {}
   if (input.title !== undefined) data.title = input.title.trim()

@@ -123,3 +123,40 @@ export async function restoreDocument(id: string): Promise<DocumentDto> {
   }
   return body
 }
+
+export async function fetchDocument(id: string): Promise<DocumentDto> {
+  const res = await credentialsFetch(`/documents/${encodeURIComponent(id)}`, { method: "GET" })
+  const body = await readBodyOrThrow(res, "Could not load document")
+  if (!isDocumentDto(body)) {
+    throw new ApiError(500, "Invalid response", body)
+  }
+  return body
+}
+
+export async function createOrReplaceShareCode(documentId: string): Promise<{ code: string }> {
+  const res = await credentialsFetch(`/documents/${encodeURIComponent(documentId)}/share`, {
+    method: "POST",
+    body: "{}",
+  })
+  const body = await readBodyOrThrow(res, "Could not create share code")
+  if (!body || typeof body !== "object" || typeof (body as { code?: unknown }).code !== "string") {
+    throw new ApiError(500, "Invalid response", body)
+  }
+  return { code: (body as { code: string }).code }
+}
+
+export async function redeemShareCode(code: string): Promise<{ documentId: string }> {
+  const res = await credentialsFetch("/documents/share/redeem", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  })
+  const body = await readBodyOrThrow(res, "Could not open shared document")
+  if (
+    !body ||
+    typeof body !== "object" ||
+    typeof (body as { documentId?: unknown }).documentId !== "string"
+  ) {
+    throw new ApiError(500, "Invalid response", body)
+  }
+  return { documentId: (body as { documentId: string }).documentId }
+}

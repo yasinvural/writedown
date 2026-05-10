@@ -1,9 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createDocument,
+  createOrReplaceShareCode,
   fetchActiveDocuments,
+  fetchDocument,
   fetchTrashDocuments,
   patchDocument,
+  redeemShareCode,
   restoreDocument,
   softDeleteDocument,
 } from "../../api/documents";
@@ -30,6 +33,14 @@ export function useTrashDocumentsQuery() {
   return useQuery({
     queryKey: documentKeys.trashList(),
     queryFn: fetchTrashDocuments,
+  });
+}
+
+export function useDocumentQuery(documentId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: documentKeys.detail(documentId ?? "_"),
+    queryFn: () => fetchDocument(documentId!),
+    enabled: Boolean(documentId && enabled),
   });
 }
 
@@ -71,5 +82,21 @@ export function useRestoreDocumentMutation() {
     mutationFn: (id: string) => restoreDocument(id),
     // Cache: active and trash lists both reflect restore.
     onSuccess: () => invalidate(),
+  });
+}
+
+export function useCreateShareCodeMutation() {
+  return useMutation({
+    mutationFn: (documentId: string) => createOrReplaceShareCode(documentId),
+  });
+}
+
+export function useRedeemShareCodeMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => redeemShareCode(code),
+    onSuccess: (data) => {
+      void qc.invalidateQueries({ queryKey: documentKeys.detail(data.documentId) });
+    },
   });
 }
