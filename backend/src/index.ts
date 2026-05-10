@@ -2,6 +2,7 @@ import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import express from 'express'
 import { authRouter } from './routes/authRoutes'
+import { documentRouter } from './routes/documentRoutes'
 import { prisma } from './prisma'
 
 const app = express()
@@ -17,7 +18,7 @@ app.use(
   }),
 )
 app.use(cookieParser())
-app.use(express.json({ limit: '32kb' }))
+app.use(express.json({ limit: '1mb' }))
 
 app.get('/', (_req, res) => {
   res.status(200).send('ok')
@@ -38,6 +39,7 @@ app.get('/health/db', async (_req, res) => {
 })
 
 app.use('/auth', authRouter)
+app.use('/documents', documentRouter)
 
 app.use(
   (err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
